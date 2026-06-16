@@ -1,9 +1,11 @@
 // WAJIB DIISI AGAR REALTIME BERFUNGSI DI VERCEL.
 // Ambil dari Firebase Console > Project settings > Your apps.
 // Pastikan Realtime Database sudah dibuat dan databaseURL benar.
-const firebaseConfig = {
+
+window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyDjeLTdmGUdYLiGGNkxI8wIgAc4Z-RCoZY",
   authDomain: "e-lkpd-2c898.firebaseapp.com",
+  databaseURL: "https://e-lkpd-2c898-default-rtdb.firebaseio.com",
   projectId: "e-lkpd-2c898",
   storageBucket: "e-lkpd-2c898.firebasestorage.app",
   messagingSenderId: "621847371250",
