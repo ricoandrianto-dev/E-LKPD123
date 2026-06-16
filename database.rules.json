@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "usernames": {
+      ".read": true,
+      "$username": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid)"
+      }
+    },
+    "teachers": {
+      "$teacherUid": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}
