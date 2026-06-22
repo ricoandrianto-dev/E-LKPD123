@@ -430,3 +430,22 @@ async function bootstrap() {
   renderLogin();
 }
 bootstrap();
+
+async function generateSoalDenganGemini(materi, apiKeyGuru) {
+    const prompt = `Buatkan 5 soal untuk materi ${materi} dengan tingkat kesulitan yang bervariasi. Berikan format JSON dengan key 'soal'.`;
+    
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKeyGuru}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+        const data = await response.json();
+        console.log("Hasil AI:", data.candidates[0].content.parts[0].text);
+        // Tampilkan ke layar atau masukkan ke input soal
+    } catch (error) {
+        console.error("Gagal generate soal:", error);
+    }
+}
