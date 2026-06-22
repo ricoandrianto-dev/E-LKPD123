@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Guru - E-LKPD</title>
+    <link rel="stylesheet" href="src/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+
+    <div id="login-section" class="container">
+        <h2>Login Guru</h2>
+        <div class="form-group">
+            <label>Username / Email:</label>
+            <input type="text" id="login-username" placeholder="Masukkan username">
+        </div>
+        <div class="form-group">
+            <label>Password:</label>
+            <input type="password" id="login-password" placeholder="Masukkan password">
+        </div>
+        <button id="btn-login" onclick="handleLogin()">Masuk</button>
+    </div>
+
+    <div id="dashboard-section" class="container" style="display: none;">
+        <header>
+            <h2>Selamat Datang, <span id="teacher-name">Guru</span>!</h2>
+            <button onclick="handleLogout()" style="background-color: #ff4d4d;">Keluar</button>
+        </header>
+
+        <hr>
+
+        <section class="card">
+            <h3>🔑 Pengaturan API Key Gemini</h3>
+            <p><small>Masukkan API Key Gemini Anda untuk mengaktifkan fitur AI pembuat soal otomatis.</small></p>
+            <input type="password" id="api-key-input" placeholder="AIzaSy...">
+            <button onclick="saveApiKey()">Simpan API Key</button>
+        </section>
+
+        <section class="card">
+            <h3>👥 Manajemen Siswa</h3>
+            <div class="grid-2">
+                <div>
+                    <h4>Manual Input</h4>
+                    <input type="text" id="stud-name" placeholder="Nama Lengkap">
+                    <input type="text" id="stud-class" placeholder="Kelas (Contoh: X-A)">
+                    <input type="number" id="stud-tkm" placeholder="Nilai TKM (0-100)" oninput="autoCalculateTKM()">
+                    
+                    <div style="margin: 10px 0; background: #f0f0f0; padding: 10px; border-radius: 5px;">
+                        <p>Kategori: <strong id="lbl-kategori">-</strong></p>
+                        <p>Kode Otomatis: <strong id="lbl-kode">-</strong></p>
+                    </div>
+                    <button onclick="saveStudentManual()">Tambah Siswa</button>
+                </div>
+                <div style="border-left: 1px solid #ccc; padding-left: 20px;">
+                    <h4>Upload Excel (.xlsx / .xls)</h4>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls">
+                    <button onclick="uploadExcel()" style="background-color: #28a745;">Proses & Unggah Excel</button>
+                    <p><small>*Kolom Excel wajib berisi: <strong>Nama</strong>, <strong>Kelas</strong>, <strong>TKM</strong></small></p>
+                </div>
+            </div>
+            
+            <h4>Daftar Siswa Anda</h4>
+            <button onclick="shuffleStudents()" style="background-color: #ffa500;">🔀 Acak Urutan Siswa</button>
+            <table border="1" width="100%" style="margin-top:10px; border-collapse: collapse;" id="table-students">
+                <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>Kelas</th>
+                        <th>TKM</th>
+                        <th>Kategori</th>
+                        <th>Kode</th>
+                    </tr>
+                </thead>
+                <tbody id="list-siswa"></tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h3>📚 Manajemen Soal</h3>
+            <div class="grid-2">
+                <div>
+                    <h4>Input Soal Manual (Mendukung Rumus Matematika)</h4>
+                    <textarea id="question-text" rows="4" placeholder="Tulis soal di sini. Gunakan format $$1/2$$ atau $$\sqrt{x}$$ untuk rumus matematika."></textarea>
+                    <button onclick="saveQuestionManual()">Simpan Soal</button>
+                </div>
+                <div style="border-left: 1px solid #ccc; padding-left: 20px;">
+                    <h4>🤖 Generate Soal dengan AI (Gemini)</h4>
+                    <input type="text" id="ai-topic" placeholder="Contoh: Pecahan Senilai Kelas 4">
+                    <button onclick="generateSoalAI()" style="background-color: #6200ee;">Buatkan Soal Otomatis</button>
+                </div>
+            </div>
+
+            <h4>Daftar Soal Anda</h4>
+            <button onclick="shuffleQuestions()" style="background-color: #ffa500;">🔀 Acak Urutan Soal</button>
+            <div id="list-soal" style="margin-top: 15px;"></div>
+        </section>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        // CONTEXT: Konfigurasi Firebase Anda (Suaikan dengan milik Anda)
+        const firebaseConfig = {
+            apiKey: "AIzaSyYourActualConfigKey...",
+            authDomain: "e-lkpd123.firebaseapp.com",
+            projectId: "e-lkpd123",
+            storageBucket: "e-lkpd123.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:12345:web:12345"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentTeacherId = null;
+        let geminiApiKey = "";
+        let localStudents = [];
+        let localQuestions = [];
+
+        // --- 1. SISTEM AUTENTIKASI MULTI GURU ---
+        window.handleLogin = async () => {
+            const email = document.getElementById('login-username').value;
+            const pass = document.getElementById('login-password').value;
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+                alert("Login Berhasil!");
+            } catch (error) {
+                alert("Gagal Login: " + error.message);
+            }
+        };
+
+        window.handleLogout = () => {
+            signOut(auth).then(() => { location.reload(); });
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentTeacherId = user.uid;
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('dashboard-section').style.display = 'block';
+                document.getElementById('teacher-name').innerText = user.email;
+                
+                // Ambil API Key dan Data Guru dari Firestore
+                await loadTeacherSettings();
+                await loadTeacherData();
+            } else {
+                document.getElementById('login-section').style.display = 'block';
+                document.getElementById('dashboard-section').style.display = 'none';
+            }
+        });
+
+        // --- 2. PENGATURAN API KEY GEMINI PER GURU ---
+        async function loadTeacherSettings() {
+            const docRef = doc(db, "teachers", currentTeacherId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists() && docSnap.data().gemini_api_key) {
+                geminiApiKey = docSnap.data().gemini_api_key;
+                document.getElementById('api-key-input').value = geminiApiKey;
+            }
+        }
+
+        window.saveApiKey = async () => {
+            const keyInput = document.getElementById('api-key-input').value;
+            await setDoc(doc(db, "teachers", currentTeacherId), { gemini_api_key: keyInput }, { merge: true });
+            geminiApiKey = keyInput;
+            alert("API Key berhasil disimpan!");
+        };
+
+        // --- 3. LOGIKA INDIKATOR TKM OTOMATIS ---
+        window.autoCalculateTKM = () => {
+            const tkm = parseInt(document.getElementById('stud-tkm').value) || 0;
+            let kategori = "Rendah";
+            let prefix = "R";
+
+            if (tkm >= 80) { kategori = "Tinggi"; prefix = "T"; }
+            else if (tkm >= 60) { kategori = "Sedang"; prefix = "S"; }
+
+            const randomDigits = Math.floor(100 + Math.random() * 900); // 3 digit acak
+            const kodeOtomatis = `${prefix}-${randomDigits}`;
+
+            document.getElementById('lbl-kategori').innerText = kategori;
+            document.getElementById('lbl-kode').innerText = kodeOtomatis;
+
+            return { kategori, kodeOtomatis };
+        };
+
+        // --- 4. MANAJEMEN DATA SISWA (MANUAL & EXCEL) ---
+        window.saveStudentManual = async () => {
+            const nama = document.getElementById('stud-name').value;
+            const kelas = document.getElementById('stud-class').value;
+            const tkm = parseInt(document.getElementById('stud-tkm').value) || 0;
+            const { kategori, kodeOtomatis } = autoCalculateTKM();
+
+            if(!nama || !kelas) return alert("Mohon lengkapi data!");
+
+            const studentData = { teacher_id: currentTeacherId, nama, kelas, tkm, kategori, kode_otomatis: kodeOtomatis };
+            await addDoc(collection(db, "students"), studentData);
+            alert("Siswa berhasil ditambahkan!");
+            loadTeacherData();
+        };
+
+        window.uploadExcel = () => {
+            const fileInput = document.getElementById('excel-file');
+            if (fileInput.files.length === 0) return alert("Pilih file excel terlebih dahulu!");
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonArray = XLSX.utils.sheet_to_json(worksheet);
+
+                for (let row of jsonArray) {
+                    const nama = row.Nama || row.nama;
+                    const kelas = row.Kelas || row.kelas;
+                    const tkm = parseInt(row.TKM || row.tkm) || 0;
+
+                    let kategori = "Rendah"; let prefix = "R";
+                    if (tkm >= 80) { kategori = "Tinggi"; prefix = "T"; }
+                    else if (tkm >= 60) { kategori = "Sedang"; prefix = "S"; }
+                    const kode = `${prefix}-${Math.floor(100 + Math.random() * 900)}`;
+
+                    await addDoc(collection(db, "students"), {
+                        teacher_id: currentTeacherId, nama, kelas, tkm, kategori, kode_otomatis: kode
+                    });
+                }
+                alert("Semua data Excel berhasil diunggah!");
+                loadTeacherData();
+            };
+            reader.readAsArrayBuffer(file);
+        };
+
+        // --- 5. GENERATE SOAL AI (GEMINI) ---
+        window.generateSoalAI = async () => {
+            const topic = document.getElementById('ai-topic').value;
+            if(!geminiApiKey) return alert("Mohon isi dan simpan API Key Gemini terlebih dahulu!");
+            if(!topic) return alert("Tuliskan topik materinya!");
+
+            const promptText = `Buatkan 1 soal pilihan matematika esai tentang materi ${topic}. Berikan langsung teks soalnya saja tanpa teks pembuka/penutup. Jika ada rumus pecahan atau matematika gunakan sintaks LaTeX standar diapit tanda $$, contoh: $$\\frac{1}{2}$$.`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+                });
+                const data = await response.json();
+                const hasilAI = data.candidates[0].content.parts[0].text;
+                
+                document.getElementById('question-text').value = hasilAI;
+                alert("Soal berhasil dibuat oleh AI! Silakan edit kembali atau klik 'Simpan Soal'.");
+            } catch (err) {
+                alert("AI Gagal membuat soal: " + err.message);
+            }
+        };
+
+        window.saveQuestionManual = async () => {
+            const teksSoal = document.getElementById('question-text').value;
+            if(!teksSoal) return alert("Teks soal kosong!");
+
+            await addDoc(collection(db, "questions_bank"), {
+                teacher_id: currentTeacherId,
+                soal: teksSoal,
+                timestamp: Date.now()
+            });
+            alert("Soal berhasil disimpan!");
+            document.getElementById('question-text').value = "";
+            loadTeacherData();
+        };
+
+        // --- 6. ACAK DATA (SHUFFLE) ---
+        window.shuffleStudents = () => {
+            localStudents.sort(() => Math.random() - 0.5);
+            renderStudentsTable();
+        };
+
+        window.shuffleQuestions = () => {
+            localQuestions.sort(() => Math.random() - 0.5);
+            renderQuestionsList();
+        };
+
+        // --- LOAD & RENDER DATA ---
+        async function loadTeacherData() {
+            // Ambil Siswa
+            const qSiswa = query(collection(db, "students"), where("teacher_id", "==", currentTeacherId));
+            const snapSiswa = await getDocs(qSiswa);
+            localStudents = [];
+            snapSiswa.forEach(doc => localStudents.push(doc.data()));
+            renderStudentsTable();
+
+            // Ambil Soal
+            const qSoal = query(collection(db, "questions_bank"), where("teacher_id", "==", currentTeacherId));
+            const snapSoal = await getDocs(qSoal);
+            localQuestions = [];
+            snapSoal.forEach(doc => localQuestions.push(doc.data()));
+            renderQuestionsList();
+        }
+
+        function renderStudentsTable() {
+            const html = localStudents.map(s => `<tr><td>${s.nama}</td><td>${s.kelas}</td><td>${s.tkm}</td><td>${s.kategori}</td><td><code>${s.kode_otomatis}</code></td></tr>`).join('');
+            document.getElementById('list-siswa').innerHTML = html;
+        }
+
+        function renderQuestionsList() {
+            const html = localQuestions.map((q, idx) => `<div class="card" style="background:#f9f9f9;"><strong>Soal ${idx+1}:</strong> <p>${q.soal}</p></div>`).join('');
+            document.getElementById('list-soal').innerHTML = html;
+            // Trigger MathJax untuk merender ulang rumus matematika jika ada pecahan/LaTeX baru
+            if(window.MathJax) { MathJax.typesetPromise(); }
+        }
+    </script>
+
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .card { border: 1px solid #e0e0e0; padding: 15px; border-radius: 6px; margin-bottom: 20px; background-color: #ffffff; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { margin-bottom: 15px; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 5px;}
+        button:hover { opacity: 0.9; }
+        table { border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+    </style>
+</body>
+</html>
