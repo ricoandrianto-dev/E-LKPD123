@@ -449,3 +449,60 @@ async function generateSoalDenganGemini(materi, apiKeyGuru) {
         console.error("Gagal generate soal:", error);
     }
 }
+
+// 1. TARUH DI PALING ATAS FILE: Import db dari konfigurasi Firebase Anda
+import { db } from "../public/firebase-config.js"; 
+import { doc, onSnapshot, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.x.x/firebase-firestore.js"; 
+// Catatan: Sesuaikan link import firebase-firestore di atas dengan versi yang Anda gunakan
+
+// 2. TARUH DI AREA STATE/VARIABEL GLOBAL (Bisa juga memanfaatkan src/app-state.js jika ada)
+let groupId = ""; // Nanti diisi otomatis saat siswa login dan memilih kelompok
+let userId = "";  // ID siswa yang sedang login
+
+// 3. FUNGSI UTAMA UNTUK MEMULAI SINKRONISASI (Panggil fungsi ini SETELAH siswa berhasil masuk kelompok)
+function aktifkanSinkronisasiRealtime(idKelompok) {
+    groupId = idKelompok;
+    const docRef = doc(db, "lkpd_sessions", groupId);
+
+    // Listener Real-time dari Firestore
+    onSnapshot(docRef, (docSnap) => {
+        if (!docSnap.exists()) return;
+        
+        const data = docSnap.data();
+        
+        // Tampilkan jumlah polling ke layar secara realtime
+        document.getElementById("voteSetuju").innerText = data.polling.setuju.length;
+        document.getElementById("voteRagu").innerText = data.polling.ragu.length;
+
+        // Cek apakah tombol "Next" boleh aktif atau tidak
+        const btnNext = document.getElementById("btnNextPhase");
+        const totalAnggota Kelompok = data.anggota.length; // Jumlah total anak di grup itu
+
+        // Tombol Next terbuka HANYA JIKA semua anggota sudah klik setuju
+        if (data.polling.setuju.length === totalAnggotaKelompok) {
+            btnNext.disabled = false; 
+        } else {
+            btnNext.disabled = true;  
+        }
+
+        // Kunci tombol kembali jika sudah masuk Fase 2 atau 3
+        if (data.phase >= 2) {
+            const btnBack = document.getElementById("btnBack");
+            if (btnBack) btnBack.style.display = "none";
+        }
+    });
+}
+
+// 4. FUNGSI KETIKA SISWA KLIK TOMBOL "SETUJU" DI LAYAR
+async function klikSetuju() {
+    if (!groupId) return;
+    const docRef = doc(db, "lkpd_sessions", groupId);
+
+    // Tambahkan ID siswa ke dalam array polling setuju di Firestore
+    await updateDoc(docRef, {
+        "polling.setuju": arrayUnion(userId)
+    });
+}
+
+// 5. TARUH DI BAGIAN EVENT LISTENERS (Menghubungkan tombol HTML dengan fungsi JS)
+document.getElementById("btnSetujuHtml").addEventListener("click", klikSetuju);
